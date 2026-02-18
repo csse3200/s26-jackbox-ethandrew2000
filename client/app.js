@@ -1,36 +1,51 @@
 /**
  * Majority Rules – Student client
- * Complete the TODO blocks by implementing fetch() calls using .then() and .catch() only.
- * Use the API_BASE constant; do not hardcode localhost elsewhere.
+ * Fully implemented with ngrok headers
  */
 
-// Base URL for the API. Use this for all requests (e.g. API_BASE + '/api/join').
-const API_BASE = window.location.origin;
+// Base URL for the API. Use this for all requests.
+const API_BASE = "https://unpopulously-ungrimed-pilar.ngrok-free.dev";
+
+// Shared headers including ngrok skip warning
+const NGROK_HEADERS = {
+  'Content-Type': 'application/json',
+  'ngrok-skip-browser-warning': 'true'
+};
 
 // -----------------------------------------------------------------------------
-// State (set after join)
+// State
 // -----------------------------------------------------------------------------
 let playerId = null;
 let playerName = null;
 let pollInterval = null;
+let currentRoundId = null;
 
 // -----------------------------------------------------------------------------
-// TODO: Implement joinGame()
-// POST /api/join with body: { "name": "..." }
-// On success: store player_id and name, then call onJoined() and start polling.
-// On error: call showJoinError(message).
+// Join game
 // -----------------------------------------------------------------------------
 function joinGame(name) {
-  // TODO: use fetch() to POST to API_BASE + '/api/join'
-  // Body: JSON.stringify({ name: name })
-  // Headers: { 'Content-Type': 'application/json' }
-  // Parse response with .json(), check for player_id, then:
-  //   playerId = data.player_id;
-  //   playerName = data.name;
-  //   onJoined();
-  //   startPolling();
-  // On error response (e.g. !response.ok), read JSON and call showJoinError(data.error || 'Join failed');
-  showJoinError('TODO: implement joinGame()');
+  fetch(API_BASE + '/api/join', {
+    method: 'POST',
+    headers: NGROK_HEADERS,
+    body: JSON.stringify({ name: name })
+  })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) {
+          throw new Error(data.error || 'Join failed');
+        }
+        return data;
+      });
+    })
+    .then(function (data) {
+      playerId = data.player_id;
+      playerName = data.name;
+      onJoined();
+      startPolling();
+    })
+    .catch(function (err) {
+      showJoinError(err.message);
+    });
 }
 
 function onJoined() {
@@ -47,16 +62,34 @@ function showJoinError(message) {
 }
 
 // -----------------------------------------------------------------------------
-// TODO: Implement pollState()
-// GET /api/state – returns phase, round_id, round_total, prompt, etc.
-// Update the UI: phase display, prompt display, show/hide answer/guess/results areas.
+// Poll state
 // -----------------------------------------------------------------------------
 function pollState() {
-  // TODO: use fetch() to GET API_BASE + '/api/state'
-  // Parse JSON, then update:
-  //   document.getElementById('phase-display').textContent = 'Phase: ' + data.phase + '  Round ' + data.round_id + '/' + data.round_total;
-  //   document.getElementById('prompt-display').textContent = data.prompt || '—';
-  //   Show/hide #answer-area (phase === 'ANSWER'), #guess-area (phase === 'GUESS'), #results-area (phase === 'RESULTS')
+  fetch(API_BASE + '/api/state', {
+    headers: NGROK_HEADERS
+  })
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('State request failed: ' + response.status);
+      }
+      return response.json();
+    })
+    .then(function (data) {
+      currentRoundId = data.round_id;
+
+      document.getElementById('phase-display').textContent =
+        'Phase: ' + data.phase + '  Round ' + data.round_id + '/' + data.round_total;
+
+      document.getElementById('prompt-display').textContent =
+        data.prompt || '—';
+
+      document.getElementById('answer-area').hidden = data.phase !== 'ANSWER';
+      document.getElementById('guess-area').hidden = data.phase !== 'GUESS';
+      document.getElementById('results-area').hidden = data.phase !== 'RESULTS';
+    })
+    .catch(function (err) {
+      console.error('Polling error:', err.message);
+    });
 }
 
 function startPolling() {
@@ -66,53 +99,107 @@ function startPolling() {
 }
 
 // -----------------------------------------------------------------------------
-// TODO: Implement submitAnswer()
-// POST /api/answer with body: { player_id, round_id, answer }
-// You need round_id from the last pollState() – store it in a variable when you implement pollState().
-// On success: clear answer input and show "Answer submitted". On error: show error message in #answer-status.
+// Submit answer
 // -----------------------------------------------------------------------------
-let currentRoundId = null; // set this in pollState() from data.round_id
-
 function submitAnswer() {
   const answer = document.getElementById('answer').value.trim();
   if (!answer) return;
-  // TODO: use fetch() to POST to API_BASE + '/api/answer'
-  // Body: JSON.stringify({ player_id: playerId, round_id: currentRoundId, answer: answer })
-  // Headers: { 'Content-Type': 'application/json' }
-  // On success: clear input, set #answer-status to "Answer submitted"
-  // On error (e.g. 409): read JSON and show data.error in #answer-status with class "status error"
+
+  fetch(API_BASE + '/api/answer', {
+    method: 'POST',
+    headers: NGROK_HEADERS,
+    body: JSON.stringify({
+      player_id: playerId,
+      round_id: currentRoundId,
+      answer: answer
+    })
+  })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) {
+          throw new Error(data.error || 'Answer submission failed');
+        }
+        return data;
+      });
+    })
+    .then(function () {
+      document.getElementById('answer').value = '';
+      const el = document.getElementById('answer-status');
+      el.textContent = 'Answer submitted';
+      el.className = 'status';
+    })
+    .catch(function (err) {
+      const el = document.getElementById('answer-status');
+      el.textContent = err.message;
+      el.className = 'status error';
+    });
 }
 
 // -----------------------------------------------------------------------------
-// TODO: Implement submitGuess()
-// POST /api/guess with body: { player_id, round_id, guess }
-// On success: clear guess input and show "Guess submitted". On error: show error in #guess-status.
+// Submit guess
 // -----------------------------------------------------------------------------
 function submitGuess() {
   const guess = document.getElementById('guess').value.trim();
   if (!guess) return;
-  // TODO: use fetch() to POST to API_BASE + '/api/guess'
-  // Body: JSON.stringify({ player_id: playerId, round_id: currentRoundId, guess: guess })
-  // Headers: { 'Content-Type': 'application/json' }
-  // On success: clear input, set #guess-status to "Guess submitted"
-  // On error: show data.error in #guess-status with class "status error"
+
+  fetch(API_BASE + '/api/guess', {
+    method: 'POST',
+    headers: NGROK_HEADERS,
+    body: JSON.stringify({
+      player_id: playerId,
+      round_id: currentRoundId,
+      guess: guess
+    })
+  })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) {
+          throw new Error(data.error || 'Guess submission failed');
+        }
+        return data;
+      });
+    })
+    .then(function () {
+      document.getElementById('guess').value = '';
+      const el = document.getElementById('guess-status');
+      el.textContent = 'Guess submitted';
+      el.className = 'status';
+    })
+    .catch(function (err) {
+      const el = document.getElementById('guess-status');
+      el.textContent = err.message;
+      el.className = 'status error';
+    });
 }
 
 // -----------------------------------------------------------------------------
-// TODO: Implement fetchResults()
-// GET /api/results?round_id=<currentRoundId>
-// Display the returned breakdown and majority_answers in #results (e.g. JSON.stringify(data, null, 2)).
+// Fetch results
 // -----------------------------------------------------------------------------
 function fetchResults() {
-  // TODO: use fetch() to GET API_BASE + '/api/results?round_id=' + currentRoundId
-  // Parse JSON, then set document.getElementById('results').textContent = JSON.stringify(data, null, 2);
-  // On error (e.g. 409): show message that results are not available yet
+  fetch(API_BASE + '/api/results?round_id=' + currentRoundId, {
+    headers: NGROK_HEADERS
+  })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) {
+          throw new Error(data.error || 'Results not available yet');
+        }
+        return data;
+      });
+    })
+    .then(function (data) {
+      document.getElementById('results').textContent =
+        JSON.stringify(data, null, 2);
+    })
+    .catch(function (err) {
+      document.getElementById('results').textContent = err.message;
+    });
 }
 
 // -----------------------------------------------------------------------------
-// UI wiring (no TODOs)
+// UI wiring
 // -----------------------------------------------------------------------------
-document.getElementById('btn-join').addEventListener('click', function() {
+document.getElementById('btn-join').addEventListener('click', function () {
   const name = document.getElementById('name').value.trim();
   if (!name) {
     showJoinError('Enter your name');
